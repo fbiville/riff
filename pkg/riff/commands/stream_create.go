@@ -18,23 +18,54 @@ package commands
 
 import (
 	"context"
-	"fmt"
+	"github.com/projectriff/riff/pkg/validation"
+	streamv1alpha1 "github.com/projectriff/system/pkg/apis/stream/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/projectriff/riff/pkg/cli"
 	"github.com/spf13/cobra"
 )
 
 type StreamCreateOptions struct {
-	Namespace string
+	ContentType string // TODO update Stream CRD
+	Name        string
+	Namespace   string
+	Provider    string
 }
 
 func (opts *StreamCreateOptions) Validate(ctx context.Context) *cli.FieldError {
-	// TODO implement
-	return nil
+	errs := &cli.FieldError{}
+	if opts.Namespace == "" {
+		errs = errs.Also(cli.ErrMissingField(cli.NamespaceFlagName))
+	}
+	if opts.Name == "" {
+		errs = errs.Also(cli.ErrMissingField(cli.NameFlagName))
+	} else {
+		errs = errs.Also(validation.K8sName(opts.Name, cli.NameFlagName))
+	}
+	if opts.Provider == "" {
+		errs = errs.Also(cli.ErrMissingField(cli.ProviderFlagName))
+	}
+	return errs
 }
 
 func (opts *StreamCreateOptions) Exec(ctx context.Context, c *cli.Config) error {
-	return fmt.Errorf("not implemented")
+	stream := &streamv1alpha1.Stream{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: opts.Namespace,
+			Name:      opts.Name,
+		},
+		Spec: streamv1alpha1.StreamSpec{
+			Provider: opts.Provider,
+		},
+	}
+	stream, err := c.Stream().Streams(opts.Namespace).Create(stream)
+	if err != nil {
+		return err
+	}
+
+	_, _ = c.Successf("Created stream %q\n", stream.Name)
+	return nil
 }
 
 func NewStreamCreateCommand(c *cli.Config) *cobra.Command {
